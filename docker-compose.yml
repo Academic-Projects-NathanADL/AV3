@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: greencode-circuito-vivo-av3-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: greencode
+      POSTGRES_PASSWORD: greencode_dev
+      POSTGRES_DB: greencode_av3
+    ports:
+      - "5433:5432"
+    volumes:
+      - greencode_av3_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U greencode -d greencode_av3"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    container_name: greencode-circuito-vivo-av3-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - greencode_av3_redisdata:/data
+
+volumes:
+  greencode_av3_pgdata:
+  greencode_av3_redisdata:

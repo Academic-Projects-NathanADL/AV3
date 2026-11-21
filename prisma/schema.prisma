@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Papel {
+  ADMINISTRADOR
+  OPERADOR_CADASTRO
+  GESTOR_ALMOXARIFADO
+  AUDITOR
+}
+
+enum TipoOrganizacao {
+  VAREJO
+  SAUDE
+  EDUCACAO
+  BANCARIO
+  INDUSTRIA
+  OUTRO
+}
+
+enum StatusLote {
+  RECEBIDO
+  EM_TRIAGEM
+  TRIADO
+  ENCERRADO
+}
+
+enum TipoEquipamento {
+  DESKTOP
+  NOTEBOOK
+  MONITOR
+  TERMINAL_BANCARIO
+  IMPRESSORA
+  SERVIDOR
+  PERIFERICO
+  OUTRO
+}
+
+enum EstadoFisico {
+  EXCELENTE
+  BOM
+  REGULAR
+  RUIM
+  INSERVIVEL
+}
+
+enum StatusEquipamento {
+  AGUARDANDO_TRIAGEM
+  TRIADO
+  DESMONTE
+  EM_RECUPERACAO
+  REUTILIZADO
+  RECICLADO
+  DESCARTE_SEGURO
+}
+
+enum TipoMovimentacao {
+  ENTRADA
+  TRIAGEM
+  ALTERACAO_ESTADO
+  ENCAMINHAMENTO
+  RECUPERACAO
+  DESTINO_FINAL
+}
+
+enum StatusRelatorioAnalitico {
+  PENDENTE
+  PROCESSANDO
+  CONCLUIDO
+  FALHOU
+}
+
+enum TipoRelatorioAnalitico {
+  PACOTE_ANALITICO
+}
+
+enum OrigemObservacaoCondicao {
+  RECEBIMENTO
+  ALTERACAO_CONDICAO
+  HISTORICO_IMPORTADO
+}
+
+model Usuario {
+  id            String         @id @default(uuid()) @db.Uuid
+  login         String         @unique @db.VarChar(60)
+  nomeCompleto  String         @map("nome_completo") @db.VarChar(160)
+  senhaHash     String         @map("senha_hash") @db.VarChar(100)
+  papel         Papel
+  ativo         Boolean        @default(true)
+  versao        Int            @default(1)
+  criadoEm      DateTime       @default(now()) @map("criado_em") @db.Timestamptz(3)
+  movimentacoes Movimentacao[]
+
+  @@map("usuarios")
+}
+
+model Organizacao {
+  id          String               @id @default(uuid()) @db.Uuid
+  cnpj        String               @unique @db.VarChar(14)
+  razaoSocial String               @map("razao_social") @db.VarChar(180)
+  tipo        TipoOrganizacao
+  ativa       Boolean              @default(true)
+  versao      Int                  @default(1)
+  criadoEm    DateTime             @default(now()) @map("criado_em") @db.Timestamptz(3)
+  contrato    Contrato?
+  lotes       Lote[]
+  chavesApi   ChaveApi[]
+  relatorios  RelatorioAnalitico[]
+
+  @@map("organizacoes")
+}
+
+model Contrato {
+  id                     String      @id @default(uuid()) @db.Uuid
+  organizacaoId          String      @unique @map("organizacao_id") @db.Uuid
+  numero                 String      @unique @db.VarChar(60)
+  dataInicio             DateTime    @map("data_inicio") @db.Date
+  prazoArmazenamentoDias Int         @map("prazo_armazenamento_dias")
+  ativo                  Boolean     @default(true)
+  versao                 Int         @default(1)
+  criadoEm               DateTime    @default(now()) @map("criado_em") @db.Timestamptz(3)
+  organizacao            Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
+
+  @@index([ativo, dataInicio])
+  @@map("contratos")
+}
+
+model Lote {
+  id             String        @id @default(uuid()) @db.Uuid
+  codigoPublico  String        @unique @map("codigo_publico") @db.VarChar(24)
+  organizacaoId  String        @map("organizacao_id") @db.Uuid
+  notaFiscal     String        @map("nota_fiscal") @db.VarChar(60)
+  transportadora String        @db.VarChar(120)
+  dataEntrada    DateTime      @map("data_entrada") @db.Timestamptz(3)
+  status         StatusLote    @default(RECEBIDO)
+  versao         Int           @default(1)
+  criadoEm       DateTime      @default(now()) @map("criado_em") @db.Timestamptz(3)
+  organizacao    Organizacao   @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
+  equipamentos   Equipamento[]
+
+  @@index([organizacaoId, dataEntrada])
+  @@index([status, dataEntrada])
+  @@map("lotes")
+}
+
+model Equipamento {
+  id                               String               @id @default(uuid()) @db.Uuid
+  codigoRastreio                   String               @unique @map("codigo_rastreio") @db.VarChar(32)
+  codigoBarras                     String?              @unique @map("codigo_barras") @db.VarChar(80)
+  loteId                           String               @map("lote_id") @db.Uuid
+  tipo                             TipoEquipamento
+  estadoFisico                     EstadoFisico         @map("estado_fisico")
+  status                           StatusEquipamento    @default(AGUARDANDO_TRIAGEM)
+  triagemCompleta                  Boolean              @default(false) @map("triagem_completa")
+  destinoFinal                     String?              @map("destino_final") @db.VarChar(180)
+  justificativa                    String?              @db.VarChar(500)
+  marca                            String?              @db.VarChar(100)
+  modelo                           String?              @db.VarChar(100)
+  valorAquisicaoCentavos           Int?                 @map("valor_aquisicao_centavos")
+  valorRecuperacaoEstimadoCentavos Int?                 @map("valor_recuperacao_estimado_centavos")
+  idadeMeses                       Int?                 @map("idade_meses")
+  versao                           Int                  @default(1)
+  criadoEm                         DateTime             @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm                     DateTime             @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+  lote                             Lote                 @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  movimentacoes                    Movimentacao[]
+  historicoCondicao                ObservacaoCondicao[]
+
+  @@index([loteId, status])
+  @@index([status, atualizadoEm])
+  @@map("equipamentos")
+}
+
+model ParametroFinanceiro {
+  id                             Int      @id @default(1)
+  aliquotaImpostoBps             Int      @default(0) @map("aliquota_imposto_bps")
+  coeficienteDepreciacaoAnualBps Int      @default(2000) @map("coeficiente_depreciacao_anual_bps")
+  versao                         Int      @default(1)
+  atualizadoEm                   DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  @@map("parametros_financeiros")
+}
+
+model Movimentacao {
+  id             String             @id @default(uuid()) @db.Uuid
+  equipamentoId  String             @map("equipamento_id") @db.Uuid
+  usuarioId      String?            @map("usuario_id") @db.Uuid
+  chaveApiId     String?            @map("chave_api_id") @db.Uuid
+  tipo           TipoMovimentacao
+  statusAnterior StatusEquipamento? @map("status_anterior")
+  statusNovo     StatusEquipamento? @map("status_novo")
+  estadoAnterior EstadoFisico?      @map("estado_anterior")
+  estadoNovo     EstadoFisico?      @map("estado_novo")
+  justificativa  String?            @db.VarChar(500)
+  ocorridoEm     DateTime           @default(now()) @map("ocorrido_em") @db.Timestamptz(3)
+  versao         Int                @default(1)
+  equipamento    Equipamento        @relation(fields: [equipamentoId], references: [id], onDelete: Restrict)
+  usuario        Usuario?           @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  chaveApi       ChaveApi?          @relation(fields: [chaveApiId], references: [id], onDelete: Restrict)
+
+  @@index([equipamentoId, ocorridoEm])
+  @@index([usuarioId, ocorridoEm])
+  @@map("movimentacoes")
+}
+
+model ChaveApi {
+  id            String               @id @default(uuid()) @db.Uuid
+  nome          String               @db.VarChar(100)
+  prefixo       String               @unique @db.VarChar(32)
+  segredoHash   String               @map("segredo_hash") @db.VarChar(64)
+  permissoes    String[]             @default([])
+  organizacaoId String               @map("organizacao_id") @db.Uuid
+  ativa         Boolean              @default(true)
+  versao        Int                  @default(1)
+  criadoEm      DateTime             @default(now()) @map("criado_em") @db.Timestamptz(3)
+  revogadaEm    DateTime?            @map("revogada_em") @db.Timestamptz(3)
+  organizacao   Organizacao          @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
+  movimentacoes Movimentacao[]
+  relatorios    RelatorioAnalitico[]
+
+  @@index([organizacaoId, ativa])
+  @@map("chaves_api")
+}
+
+model RelatorioAnalitico {
+  id            String                   @id @default(uuid()) @db.Uuid
+  tipo          TipoRelatorioAnalitico
+  status        StatusRelatorioAnalitico @default(PENDENTE)
+  organizacaoId String                   @map("organizacao_id") @db.Uuid
+  chaveApiId    String?                  @map("chave_api_id") @db.Uuid
+  solicitadoEm  DateTime                 @default(now()) @map("solicitado_em") @db.Timestamptz(3)
+  iniciadoEm    DateTime?                @map("iniciado_em") @db.Timestamptz(3)
+  concluidoEm   DateTime?                @map("concluido_em") @db.Timestamptz(3)
+  resultado     Json?
+  erro          String?                  @db.VarChar(500)
+  tentativas    Int                      @default(0)
+  versao        Int                      @default(1)
+  organizacao   Organizacao              @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
+  chaveApi      ChaveApi?                @relation(fields: [chaveApiId], references: [id], onDelete: SetNull)
+
+  @@index([organizacaoId, solicitadoEm])
+  @@index([status, solicitadoEm])
+  @@map("relatorios_analiticos")
+}
+
+model ObservacaoCondicao {
+  id                           String                   @id @default(uuid()) @db.Uuid
+  equipamentoId                String                   @map("equipamento_id") @db.Uuid
+  idadeMeses                   Float                    @map("idade_meses")
+  estadoFisico                 EstadoFisico             @map("estado_fisico")
+  valorContabilCentavos        Int?                     @map("valor_contabil_centavos")
+  depreciacaoAcumuladaCentavos Int?                     @map("depreciacao_acumulada_centavos")
+  origem                       OrigemObservacaoCondicao
+  falha                        Boolean                  @default(false)
+  ocorridoEm                   DateTime                 @default(now()) @map("ocorrido_em") @db.Timestamptz(3)
+  versao                       Int                      @default(1)
+  equipamento                  Equipamento              @relation(fields: [equipamentoId], references: [id], onDelete: Restrict)
+
+  @@index([equipamentoId, idadeMeses])
+  @@index([estadoFisico, ocorridoEm])
+  @@map("observacoes_condicao")
+}
